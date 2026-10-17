@@ -7,7 +7,9 @@
 <title>Astra AI</title>
 
 <style>
-* { box-sizing: border-box; }
+* {
+    box-sizing: border-box;
+}
 
 body {
     margin: 0;
@@ -52,8 +54,13 @@ main {
     height: 190px;
     margin: 30px auto 22px;
     border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%,
-        #d5ffff, #58bfff 20%, #345bdf 48%, #121b52 72%);
+    background: radial-gradient(
+        circle at 35% 30%,
+        #d5ffff,
+        #58bfff 20%,
+        #345bdf 48%,
+        #121b52 72%
+    );
     box-shadow: 0 0 35px #299bff88, 0 0 90px #3157ff44;
     animation: breathe 3s ease-in-out infinite;
 }
@@ -64,11 +71,15 @@ main {
 }
 
 @keyframes breathe {
-    50% { transform: scale(1.05); }
+    50% {
+        transform: scale(1.05);
+    }
 }
 
 @keyframes listen {
-    to { transform: scale(1.1); }
+    to {
+        transform: scale(1.1);
+    }
 }
 
 h1 {
@@ -87,7 +98,9 @@ h1 {
     margin: 24px 0 16px;
 }
 
-select, button, input {
+select,
+button,
+input {
     font: inherit;
     border-radius: 14px;
     border: 1px solid #344768;
@@ -96,7 +109,9 @@ select, button, input {
     padding: 13px;
 }
 
-select { width: 100%; }
+select {
+    width: 100%;
+}
 
 button {
     cursor: pointer;
@@ -111,7 +126,7 @@ button {
 }
 
 #mic:disabled {
-    opacity: .5;
+    opacity: 0.5;
 }
 
 #chat {
@@ -158,12 +173,15 @@ footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .orb { animation: none; }
+    .orb {
+        animation: none;
+    }
 }
 </style>
 </head>
 
 <body>
+
 <header>
     <div class="logo">ASTRA</div>
     <div id="status">AI assistant</div>
@@ -173,6 +191,7 @@ footer {
     <div class="orb" id="orb"></div>
 
     <h1>I'm here for you.</h1>
+
     <div class="subtitle" id="hint">
         Tap the microphone and talk to Astra.
     </div>
@@ -192,7 +211,11 @@ footer {
     <div id="chat" aria-live="polite"></div>
 
     <form id="textForm">
-        <input id="message" placeholder="Or type a message..." autocomplete="off">
+        <input
+            id="message"
+            placeholder="Or type a message..."
+            autocomplete="off"
+        >
         <button type="submit">Send</button>
     </form>
 </main>
@@ -212,13 +235,16 @@ const chat = document.getElementById("chat");
 const messageInput = document.getElementById("message");
 
 const SpeechRecognition =
-    window.SpeechRecognition || window.webkitSpeechRecognition;
+    window.SpeechRecognition ||
+    window.webkitSpeechRecognition;
 
 let recognition = null;
 let history = [];
 let listening = false;
 let speaking = false;
 
+
+// Display the original text, including emojis.
 function addMessage(who, text) {
     const box = document.createElement("div");
     box.className = "message";
@@ -231,25 +257,124 @@ function addMessage(who, text) {
 
     box.append(label, content);
     chat.appendChild(box);
+
     chat.scrollTop = chat.scrollHeight;
 }
 
+
+// Update the assistant's status.
 function setStatus(text) {
     statusText.textContent = text;
     hint.textContent = text;
 }
 
+
+// Remove emojis and formatting that should not be spoken.
+// The original response on screen remains unchanged.
+function cleanSpeechText(text) {
+    let clean = String(text || "");
+
+    // Replace fenced code blocks with a short spoken description.
+    clean = clean.replace(
+        /```[\s\S]*?```/g,
+        " Code block omitted. "
+    );
+
+    // Keep the words inside inline code.
+    clean = clean.replace(/`([^`]+)`/g, "$1");
+
+    // Keep link text but remove the URL.
+    clean = clean.replace(
+        /\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,
+        "$1"
+    );
+
+    // Remove standalone web addresses.
+    clean = clean.replace(
+        /https?:\/\/\S+/gi,
+        " "
+    );
+
+    // Remove HTML tags if included in the response.
+    clean = clean.replace(
+        /<[^>]*>/g,
+        " "
+    );
+
+    // Remove emoji pictographs, variation selectors and
+    // emoji joiners. Supported in modern Android Chrome.
+    try {
+        clean = clean.replace(
+            /[\p{Extended_Pictographic}\uFE0E\uFE0F\u200D]/gu,
+            " "
+        );
+    } catch (error) {
+        // Fallback for browsers without Unicode property escapes.
+        clean = clean.replace(
+            /[\uD800-\uDBFF][\uDC00-\uDFFF]/g,
+            " "
+        );
+    }
+
+    // Remove emoji skin-tone modifiers and keycap marks.
+    clean = clean.replace(
+        /[\u{1F3FB}-\u{1F3FF}\u{20E3}]/gu,
+        " "
+    );
+
+    // Remove common Markdown formatting symbols.
+    clean = clean.replace(
+        /^[\s]*#{1,6}\s+/gm,
+        ""
+    );
+
+    clean = clean.replace(
+        /(\*\*|__|~~|\*|_)/g,
+        ""
+    );
+
+    clean = clean.replace(
+        /^[\s]*[-•>]\s+/gm,
+        ""
+    );
+
+    // Remove decorative symbol runs while retaining ordinary
+    // letters, numbers, punctuation and multilingual text.
+    clean = clean.replace(
+        /[★☆♥♡❤✨🎉💙💖💫]+/gu,
+        " "
+    );
+
+    // Normalize whitespace so speech sounds natural.
+    clean = clean.replace(/[ \t]+/g, " ");
+    clean = clean.replace(/\n{3,}/g, "\n\n");
+
+    return clean.trim();
+}
+
+
+// Speak only cleaned text.
 function speak(text) {
     if (!("speechSynthesis" in window)) {
         setStatus("Voice playback isn't supported by this browser.");
         return;
     }
 
+    const speechText = cleanSpeechText(text);
+
+    // Do not speak if the response contains only emojis or symbols.
+    if (!speechText) {
+        setStatus("Ready whenever you are.");
+        return;
+    }
+
     speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    const utterance = new SpeechSynthesisUtterance(speechText);
+
     utterance.lang = language.value;
     utterance.rate = 1;
+    utterance.pitch = 1;
 
     utterance.onstart = () => {
         speaking = true;
@@ -272,21 +397,33 @@ function speak(text) {
     speechSynthesis.speak(utterance);
 }
 
+
+// Send a message to Astra's backend.
 async function askAstra(text) {
     const clean = text.trim();
-    if (!clean) return;
+
+    if (!clean) {
+        return;
+    }
 
     addMessage("You", clean);
-    history.push({ role: "user", content: clean });
+
+    history.push({
+        role: "user",
+        content: clean
+    });
 
     messageInput.value = "";
     mic.disabled = true;
+
     setStatus("Astra is thinking...");
 
     try {
         const response = await fetch("/chat", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+                "Content-Type": "application/json"
+            },
             body: JSON.stringify({
                 message: clean,
                 history: history.slice(-10, -1)
@@ -296,31 +433,52 @@ async function askAstra(text) {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || "Request failed.");
+            throw new Error(
+                data.error || "Request failed."
+            );
         }
 
-        const reply = data.reply || "I couldn't generate a response.";
+        const reply =
+            data.reply || "I couldn't generate a response.";
+
+        // Display the full response, including emojis.
         addMessage("Astra", reply);
-        history.push({ role: "assistant", content: reply });
+
+        history.push({
+            role: "assistant",
+            content: reply
+        });
+
+        // Speak a cleaned version of the same response.
         speak(reply);
 
     } catch (error) {
-        addMessage("Astra", "I'm having trouble connecting. Please try again.");
+        addMessage(
+            "Astra",
+            "I'm having trouble connecting. Please try again."
+        );
+
         setStatus("Connection problem: " + error.message);
+
     } finally {
         mic.disabled = false;
     }
 }
 
+
+// Set up voice input.
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
+
     recognition.continuous = false;
     recognition.interimResults = false;
 
     recognition.onstart = () => {
         listening = true;
+
         orb.classList.add("listening");
         mic.textContent = "Listening... tap to stop";
+
         setStatus("I'm listening. Speak now.");
     };
 
@@ -335,6 +493,7 @@ if (SpeechRecognition) {
 
     recognition.onend = () => {
         listening = false;
+
         orb.classList.remove("listening");
         mic.textContent = "🎙️ Talk to Astra";
     };
@@ -358,23 +517,42 @@ if (SpeechRecognition) {
             setStatus("Please wait a moment and try again.");
         }
     });
+
 } else {
     mic.disabled = true;
     mic.textContent = "Voice input unavailable";
+
     setStatus("Try opening Astra in Chrome on Android.");
 }
 
-document.getElementById("textForm").addEventListener("submit", event => {
-    event.preventDefault();
-    askAstra(messageInput.value);
-});
 
+// Handle typed messages.
+document.getElementById("textForm").addEventListener(
+    "submit",
+    event => {
+        event.preventDefault();
+        askAstra(messageInput.value);
+    }
+);
+
+
+// Handle language changes.
 language.addEventListener("change", () => {
     if (recognition && listening) {
         recognition.stop();
     }
-    setStatus("Language set to " + language.options[language.selectedIndex].text);
+
+    if ("speechSynthesis" in window) {
+        speechSynthesis.cancel();
+        speaking = false;
+    }
+
+    setStatus(
+        "Language set to " +
+        language.options[language.selectedIndex].text
+    );
 });
 </script>
+
 </body>
 </html>
