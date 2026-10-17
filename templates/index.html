@@ -71,15 +71,11 @@ main {
 }
 
 @keyframes breathe {
-    50% {
-        transform: scale(1.05);
-    }
+    50% { transform: scale(1.05); }
 }
 
 @keyframes listen {
-    to {
-        transform: scale(1.1);
-    }
+    to { transform: scale(1.1); }
 }
 
 h1 {
@@ -109,13 +105,8 @@ input {
     padding: 13px;
 }
 
-select {
-    width: 100%;
-}
-
-button {
-    cursor: pointer;
-}
+select { width: 100%; }
+button { cursor: pointer; }
 
 #mic {
     width: 100%;
@@ -125,9 +116,7 @@ button {
     padding: 16px;
 }
 
-#mic:disabled {
-    opacity: 0.5;
-}
+#mic:disabled { opacity: 0.5; }
 
 #chat {
     margin-top: 22px;
@@ -146,9 +135,7 @@ button {
     white-space: pre-wrap;
 }
 
-.message strong {
-    color: #8bdcff;
-}
+.message strong { color: #8bdcff; }
 
 #textForm {
     display: flex;
@@ -161,9 +148,7 @@ button {
     flex: 1;
 }
 
-#textForm button {
-    background: #234b82;
-}
+#textForm button { background: #234b82; }
 
 footer {
     padding: 22px;
@@ -173,9 +158,7 @@ footer {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .orb {
-        animation: none;
-    }
+    .orb { animation: none; }
 }
 </style>
 </head>
@@ -244,7 +227,7 @@ let listening = false;
 let speaking = false;
 
 
-// Display the original text, including emojis.
+// Display messages while preserving the original text.
 function addMessage(who, text) {
     const box = document.createElement("div");
     box.className = "message";
@@ -257,95 +240,39 @@ function addMessage(who, text) {
 
     box.append(label, content);
     chat.appendChild(box);
-
     chat.scrollTop = chat.scrollHeight;
 }
 
 
-// Update the assistant's status.
 function setStatus(text) {
     statusText.textContent = text;
     hint.textContent = text;
 }
 
 
-// Remove emojis and formatting that should not be spoken.
-// The original response on screen remains unchanged.
+// Clean speech without removing emojis from displayed messages.
 function cleanSpeechText(text) {
     let clean = String(text || "");
 
-    // Replace fenced code blocks with a short spoken description.
-    clean = clean.replace(
-        /```[\s\S]*?```/g,
-        " Code block omitted. "
-    );
-
-    // Keep the words inside inline code.
+    clean = clean.replace(/```[\s\S]*?```/g, " Code block omitted. ");
     clean = clean.replace(/`([^`]+)`/g, "$1");
+    clean = clean.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1");
+    clean = clean.replace(/https?:\/\/\S+/gi, " ");
+    clean = clean.replace(/<[^>]*>/g, " ");
 
-    // Keep link text but remove the URL.
     clean = clean.replace(
-        /\[([^\]]+)\]\(https?:\/\/[^)]+\)/g,
-        "$1"
-    );
-
-    // Remove standalone web addresses.
-    clean = clean.replace(
-        /https?:\/\/\S+/gi,
+        /[\p{Extended_Pictographic}\uFE0E\uFE0F\u200D]/gu,
         " "
     );
 
-    // Remove HTML tags if included in the response.
-    clean = clean.replace(
-        /<[^>]*>/g,
-        " "
-    );
-
-    // Remove emoji pictographs, variation selectors and
-    // emoji joiners. Supported in modern Android Chrome.
-    try {
-        clean = clean.replace(
-            /[\p{Extended_Pictographic}\uFE0E\uFE0F\u200D]/gu,
-            " "
-        );
-    } catch (error) {
-        // Fallback for browsers without Unicode property escapes.
-        clean = clean.replace(
-            /[\uD800-\uDBFF][\uDC00-\uDFFF]/g,
-            " "
-        );
-    }
-
-    // Remove emoji skin-tone modifiers and keycap marks.
     clean = clean.replace(
         /[\u{1F3FB}-\u{1F3FF}\u{20E3}]/gu,
         " "
     );
 
-    // Remove common Markdown formatting symbols.
-    clean = clean.replace(
-        /^[\s]*#{1,6}\s+/gm,
-        ""
-    );
-
-    clean = clean.replace(
-        /(\*\*|__|~~|\*|_)/g,
-        ""
-    );
-
-    clean = clean.replace(
-        /^[\s]*[-•>]\s+/gm,
-        ""
-    );
-
-    // Remove decorative symbol runs while retaining ordinary
-    // letters, numbers, punctuation and multilingual text.
-    clean = clean.replace(
-        /[★☆♥♡❤✨🎉💙💖💫]+/gu,
-        " "
-    );
-
-    // Normalize whitespace so speech sounds natural.
+    clean = clean.replace(/^[\s]*#{1,6}\s+/gm, "");
+    clean = clean.replace(/(\*\*|__|~~|\*|_)/g, "");
+    clean = clean.replace(/^[\s]*[-•>]\s+/gm, "");
     clean = clean.replace(/[ \t]+/g, " ");
     clean = clean.replace(/\n{3,}/g, "\n\n");
 
@@ -353,7 +280,7 @@ function cleanSpeechText(text) {
 }
 
 
-// Speak only cleaned text.
+// Speak the cleaned response.
 function speak(text) {
     if (!("speechSynthesis" in window)) {
         setStatus("Voice playback isn't supported by this browser.");
@@ -362,7 +289,6 @@ function speak(text) {
 
     const speechText = cleanSpeechText(text);
 
-    // Do not speak if the response contains only emojis or symbols.
     if (!speechText) {
         setStatus("Ready whenever you are.");
         return;
@@ -371,7 +297,6 @@ function speak(text) {
     speechSynthesis.cancel();
 
     const utterance = new SpeechSynthesisUtterance(speechText);
-
     utterance.lang = language.value;
     utterance.rate = 1;
     utterance.pitch = 1;
@@ -398,11 +323,253 @@ function speak(text) {
 }
 
 
-// Send a message to Astra's backend.
+// App targets for Android.
+// Phone, Contacts, Camera, Gallery and Settings use Android intents.
+// Other apps use their Android package names and web fallbacks.
+const appTargets = {
+    youtube: {
+        name: "YouTube",
+        packageName: "com.google.android.youtube",
+        url: "https://www.youtube.com/"
+    },
+
+    whatsapp: {
+        name: "WhatsApp",
+        packageName: "com.whatsapp",
+        url: "https://wa.me/"
+    },
+
+    instagram: {
+        name: "Instagram",
+        packageName: "com.instagram.android",
+        url: "https://www.instagram.com/"
+    },
+
+    chrome: {
+        name: "Chrome",
+        packageName: "com.android.chrome",
+        url: "https://www.google.com/"
+    },
+
+    maps: {
+        name: "Google Maps",
+        packageName: "com.google.android.apps.maps",
+        url: "https://maps.google.com/"
+    },
+
+    gmail: {
+        name: "Gmail",
+        packageName: "com.google.android.gm",
+        url: "https://mail.google.com/"
+    },
+
+    spotify: {
+        name: "Spotify",
+        packageName: "com.spotify.music",
+        url: "https://open.spotify.com/"
+    },
+
+    mycamu: {
+        name: "MyCamu",
+        packageName: "com.octoze.camu.mycamuapp",
+        url: "https://www.mycamu.com/"
+    },
+
+    contacts: {
+        name: "Contacts",
+        action: "android.intent.action.VIEW",
+        type: "vnd.android.cursor.dir/contact",
+        url: "content://contacts"
+    },
+
+    phone: {
+        name: "Phone",
+        action: "android.intent.action.DIAL",
+        url: "tel:"
+    },
+
+    camera: {
+        name: "Camera",
+        action: "android.media.action.IMAGE_CAPTURE",
+        url: ""
+    },
+
+    gallery: {
+        name: "Gallery",
+        action: "android.intent.action.GET_CONTENT",
+        type: "image/*",
+        url: ""
+    },
+
+    settings: {
+        name: "Settings",
+        action: "android.settings.SETTINGS",
+        url: ""
+    }
+};
+
+
+// Recognize common names and alternate ways of saying them.
+const appAliases = {
+    "youtube": "youtube",
+    "whatsapp": "whatsapp",
+    "whats app": "whatsapp",
+    "instagram": "instagram",
+    "insta": "instagram",
+    "chrome": "chrome",
+    "google chrome": "chrome",
+    "maps": "maps",
+    "google maps": "maps",
+    "gmail": "gmail",
+    "google mail": "gmail",
+    "spotify": "spotify",
+    "mycamu": "mycamu",
+    "my camu": "mycamu",
+    "my camoo": "mycamu",
+    "contacts": "contacts",
+    "contact": "contacts",
+    "phone": "phone",
+    "dialer": "phone",
+    "calling app": "phone",
+    "camera": "camera",
+    "take a photo": "camera",
+    "gallery": "gallery",
+    "photos": "gallery",
+    "google photos": "gallery",
+    "settings": "settings",
+    "phone settings": "settings"
+};
+
+
+// Find the requested app.
+function findAppCommand(text) {
+    let normalized = text
+        .toLowerCase()
+        .replace(/[.!?,]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    normalized = normalized.replace(
+        /^(hey|hello|hi)\s+/,
+        ""
+    );
+
+    normalized = normalized.replace(
+        /^astra\s+/,
+        ""
+    );
+
+    normalized = normalized.replace(
+        /^please\s+/,
+        ""
+    );
+
+    const match = normalized.match(
+        /^(?:open|launch|start|show)\s+(?:the\s+)?(.+?)(?:\s+app)?$/
+    );
+
+    if (!match) {
+        return null;
+    }
+
+    const requested = match[1].trim();
+    const key = appAliases[requested];
+
+    return key ? appTargets[key] : null;
+}
+
+
+// Construct an Android intent URL.
+function makeIntentUrl(app) {
+    const parts = ["#Intent"];
+
+    if (app.action) {
+        parts.push("action=" + app.action);
+    } else {
+        parts.push("action=android.intent.action.MAIN");
+        parts.push("category=android.intent.category.LAUNCHER");
+    }
+
+    if (app.type) {
+        parts.push("type=" + app.type);
+    }
+
+    if (app.packageName) {
+        parts.push("package=" + app.packageName);
+    }
+
+    if (app.url && app.url.startsWith("https://")) {
+        parts.push(
+            "S.browser_fallback_url=" +
+            encodeURIComponent(app.url)
+        );
+    }
+
+    parts.push("end");
+
+    // Special Android actions do not need an HTTPS scheme.
+    if (app.action) {
+        if (app.url && app.url.startsWith("tel:")) {
+            return "tel:";
+        }
+
+        if (app.url && app.url.startsWith("content:")) {
+            return "intent://contacts/" + parts.join(";") ;
+        }
+
+        return "intent://" + parts.join(";");
+    }
+
+    return "intent://" +
+        app.url.replace(/^https?:\/\//i, "") +
+        parts.join(";").replace("#Intent", "#Intent;scheme=https");
+}
+
+
+// Attempt to open the requested Android app.
+function openApp(app) {
+    const response = "I'll try to open " + app.name + " for you.";
+
+    addMessage("Astra", response);
+
+    history.push({
+        role: "assistant",
+        content: response
+    });
+
+    speak(response);
+
+    if (app.name === "Phone") {
+        window.location.href = "tel:";
+        return;
+    }
+
+    if (app.action) {
+        // Android may show an app chooser for Contacts or Gallery.
+        const actionUrl = makeIntentUrl(app);
+        window.location.href = actionUrl;
+        return;
+    }
+
+    const intentUrl = makeIntentUrl(app);
+    window.location.href = intentUrl;
+}
+
+
+// Send messages to the AI backend.
 async function askAstra(text) {
     const clean = text.trim();
 
     if (!clean) {
+        return;
+    }
+
+    const app = findAppCommand(clean);
+
+    if (app) {
+        addMessage("You", clean);
+        messageInput.value = "";
+        openApp(app);
         return;
     }
 
@@ -433,15 +600,12 @@ async function askAstra(text) {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(
-                data.error || "Request failed."
-            );
+            throw new Error(data.error || "Request failed.");
         }
 
         const reply =
             data.reply || "I couldn't generate a response.";
 
-        // Display the full response, including emojis.
         addMessage("Astra", reply);
 
         history.push({
@@ -449,7 +613,6 @@ async function askAstra(text) {
             content: reply
         });
 
-        // Speak a cleaned version of the same response.
         speak(reply);
 
     } catch (error) {
@@ -466,7 +629,7 @@ async function askAstra(text) {
 }
 
 
-// Set up voice input.
+// Configure speech recognition.
 if (SpeechRecognition) {
     recognition = new SpeechRecognition();
 
@@ -475,10 +638,8 @@ if (SpeechRecognition) {
 
     recognition.onstart = () => {
         listening = true;
-
         orb.classList.add("listening");
         mic.textContent = "Listening... tap to stop";
-
         setStatus("I'm listening. Speak now.");
     };
 
@@ -493,7 +654,6 @@ if (SpeechRecognition) {
 
     recognition.onend = () => {
         listening = false;
-
         orb.classList.remove("listening");
         mic.textContent = "🎙️ Talk to Astra";
     };
@@ -521,7 +681,6 @@ if (SpeechRecognition) {
 } else {
     mic.disabled = true;
     mic.textContent = "Voice input unavailable";
-
     setStatus("Try opening Astra in Chrome on Android.");
 }
 
