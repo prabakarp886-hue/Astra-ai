@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#080d1c">
+<title>Astra AI</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: radial-gradient(ellipse at top, #172b50, #080d1c 65%);
+    color: #eef5ff;
+    font-family: system-ui, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+header {
+    width: 100%;
+    padding: 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.logo {
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    color: #8bdcff;
+}
+
+#status {
+    color: #9bb5d8;
+    font-size: 12px;
+}
+
+main {
+    width: 100%;
+    max-width: 520px;
+    padding: 18px;
+    text-align: center;
+}
+
+.orb {
+    width: 190px;
+    height: 190px;
+    margin: 30px auto 22px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%,
+        #d5ffff, #58bfff 20%, #345bdf 48%, #121b52 72%);
+    box-shadow: 0 0 35px #299bff88, 0 0 90px #3157ff44;
+    animation: breathe 3s ease-in-out infinite;
+}
+
+.orb.listening {
+    box-shadow: 0 0 45px #55ffdc, 0 0 100px #25c7ff88;
+    animation: listen 0.8s ease-in-out infinite alternate;
+}
+
+@keyframes breathe {
+    50% { transform: scale(1.05); }
+}
+
+@keyframes listen {
+    to { transform: scale(1.1); }
+}
+
+h1 {
+    font-size: 27px;
+    margin-bottom: 5px;
+}
+
+.subtitle {
+    color: #9bb5d8;
+    font-size: 14px;
+}
+
+.controls {
+    display: flex;
+    gap: 10px;
+    margin: 24px 0 16px;
+}
+
+select, button, input {
+    font: inherit;
+    border-radius: 14px;
+    border: 1px solid #344768;
+    background: #121e35;
+    color: white;
+    padding: 13px;
+}
+
+select { width: 100%; }
+
+button {
+    cursor: pointer;
+}
+
+#mic {
+    width: 100%;
+    background: linear-gradient(120deg, #1488e8, #5b63f6);
+    border: none;
+    font-weight: 700;
+    padding: 16px;
+}
+
+#mic:disabled {
+    opacity: .5;
+}
+
+#chat {
+    margin-top: 22px;
+    text-align: left;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.message {
+    padding: 13px;
+    margin: 10px 0;
+    background: #14213a;
+    border: 1px solid #273956;
+    border-radius: 15px;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.message strong {
+    color: #8bdcff;
+}
+
+#textForm {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+#message {
+    min-width: 0;
+    flex: 1;
+}
+
+#textForm button {
+    background: #234b82;
+}
+
+footer {
+    padding: 22px;
+    color: #8198b8;
+    font-size: 12px;
+    text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .orb { animation: none; }
+}
+</style>
+</head>
+
+<body>
+<header>
+    <div class="logo">ASTRA</div>
+    <div id="status">AI assistant</div>
+</header>
+
+<main>
+    <div class="orb" id="orb"></div>
+
+    <h1>I'm here for you.</h1>
+    <div class="subtitle" id="hint">
+        Tap the microphone and talk to Astra.
+    </div>
+
+    <div class="controls">
+        <select id="language" aria-label="Language">
+            <option value="en-IN">English</option>
+            <option value="te-IN">తెలుగు (Telugu)</option>
+            <option value="ta-IN">தமிழ் (Tamil)</option>
+            <option value="ml-IN">മലയാളം (Malayalam)</option>
+            <option value="hi-IN">हिन्दी (Hindi)</option>
+        </select>
+    </div>
+
+    <button id="mic">🎙️ Talk to Astra</button>
+
+    <div id="chat" aria-live="polite"></div>
+
+    <form id="textForm">
+        <input id="message" placeholder="Or type a message..." autocomplete="off">
+        <button type="submit">Send</button>
+    </form>
+</main>
+
+<footer>
+    Astra AI · Your personal assistant<br>
+    Microphone access is needed for voice input.
+</footer>
+
+<script>
+const orb = document.getElementById("orb");
+const mic = document.getElementById("mic");
+const statusText = document.getElementById("status");
+const hint = document.getElementById("hint");
+const language = document.getElementById("language");
+const chat = document.getElementById("chat");
+const messageInput = document.getElementById("message");
+
+const SpeechRecognition =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
+
+let recognition = null;
+let history = [];
+let listening = false;
+let speaking = false;
+
+function addMessage(who, text) {
+    const box = document.createElement("div");
+    box.className = "message";
+
+    const label = document.createElement("strong");
+    label.textContent = who + ": ";
+
+    const content = document.createElement("span");
+    content.textContent = text;
+
+    box.append(label, content);
+    chat.appendChild(box);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+function setStatus(text) {
+    statusText.textContent = text;
+    hint.textContent = text;
+}
+
+function speak(text) {
+    if (!("speechSynthesis" in window)) {
+        setStatus("Voice playback isn't supported by this browser.");
+        return;
+    }
+
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = language.value;
+    utterance.rate = 1;
+
+    utterance.onstart = () => {
+        speaking = true;
+        orb.classList.add("listening");
+        setStatus("Astra is speaking...");
+    };
+
+    utterance.onend = () => {
+        speaking = false;
+        orb.classList.remove("listening");
+        setStatus("Ready whenever you are.");
+    };
+
+    utterance.onerror = () => {
+        speaking = false;
+        orb.classList.remove("listening");
+        setStatus("Text response ready. Voice playback failed.");
+    };
+
+    speechSynthesis.speak(utterance);
+}
+
+async function askAstra(text) {
+    const clean = text.trim();
+    if (!clean) return;
+
+    addMessage("You", clean);
+    history.push({ role: "user", content: clean });
+
+    messageInput.value = "";
+    mic.disabled = true;
+    setStatus("Astra is thinking...");
+
+    try {
+        const response = await fetch("/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                message: clean,
+                history: history.slice(-10, -1)
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || "Request failed.");
+        }
+
+        const reply = data.reply || "I couldn't generate a response.";
+        addMessage("Astra", reply);
+        history.push({ role: "assistant", content: reply });
+        speak(reply);
+
+    } catch (error) {
+        addMessage("Astra", "I'm having trouble connecting. Please try again.");
+        setStatus("Connection problem: " + error.message);
+    } finally {
+        mic.disabled = false;
+    }
+}
+
+if (SpeechRecognition) {
+    recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+        listening = true;
+        orb.classList.add("listening");
+        mic.textContent = "Listening... tap to stop";
+        setStatus("I'm listening. Speak now.");
+    };
+
+    recognition.onresult = event => {
+        const text = event.results[0][0].transcript;
+        askAstra(text);
+    };
+
+    recognition.onerror = event => {
+        setStatus("Microphone issue: " + event.error);
+    };
+
+    recognition.onend = () => {
+        listening = false;
+        orb.classList.remove("listening");
+        mic.textContent = "🎙️ Talk to Astra";
+    };
+
+    mic.addEventListener("click", () => {
+        if (listening) {
+            recognition.stop();
+            return;
+        }
+
+        if (speaking) {
+            speechSynthesis.cancel();
+            speaking = false;
+        }
+
+        recognition.lang = language.value;
+
+        try {
+            recognition.start();
+        } catch (error) {
+            setStatus("Please wait a moment and try again.");
+        }
+    });
+} else {
+    mic.disabled = true;
+    mic.textContent = "Voice input unavailable";
+    setStatus("Try opening Astra in Chrome on Android.");
+}
+
+document.getElementById("textForm").addEventListener("submit", event => {
+    event.preventDefault();
+    askAstra(messageInput.value);
+});
+
+language.addEventListener("change", () => {
+    if (recognition && listening) {
+        recognition.stop();
+    }
+    setStatus("Language set to " + language.options[language.selectedIndex].text);
+});
+</script>
+</body>
+</html>
