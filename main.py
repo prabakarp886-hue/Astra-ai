@@ -45,11 +45,10 @@ def chat():
             "reply": reply
         })
 
-    except RuntimeError:
-        app.logger.exception("Astra configuration error")
-
+        except RuntimeError as exc:
+        app.logger.error("Astra AI error: %s", str(exc))
         return jsonify({
-            "error": "Astra's AI service needs configuration. Check the GROQ_API_KEY environment variable."
+            "error": str(exc)
         }), 503
 
     except Exception:
